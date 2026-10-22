@@ -1,0 +1,35 @@
+# This is a Declarative Automation Bundle definition for Vertice.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: Vertice
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: O catálogo do lakehouse
+    default: lakehouse_vertice
+  warehouse_id:
+    description: O ID do SQL Warehouse para as tarefas SQL
+    default: 8123be2436b64684
+  s3_access_key_id:
+    description: chave do data lake (o valor fica fora do Git)
+  s3_secret_access_key:
+    description: chave do data lake (o valor fica fora do Git)
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://dbc-86be5789-92c0.cloud.databricks.com
+    presets:
+      trigger_pause_status: PAUSED
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-86be5789-92c0.cloud.databricks.com
+      root_path: /Workspace/Users/rafaelzanela@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - user_name: rafaelzanela@gmail.com
+        level: CAN_MANAGE
