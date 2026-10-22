@@ -28,6 +28,7 @@ WITH tipado AS (
     descricao,
     -- sujeira 13: vírgula decimal; replace ANTES do CAST (try_cast perderia R$ 5,4 mi)
     CAST(replace(valor, ',', '.') AS DECIMAL(18, 2))   AS valor,
+    valor LIKE '%,%'                                   AS valor_veio_com_virgula,
     centro_custo
   FROM lakehouse_vertice.bronze.custos
 )
@@ -40,5 +41,6 @@ SELECT
   descricao,
   valor,
   valor < 0                              AS estorno,     -- sujeira 14: fica
+  valor_veio_com_virgula,
   centro_custo
 FROM tipado;

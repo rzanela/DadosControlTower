@@ -1,0 +1,14 @@
+# Dashboard como CÓDIGO.
+#
+# Este recurso publica o dashboard de Portfólio da Torre de Controle (AI/BI Lakeview).
+# Lê a camada GOLD (e silver.entregas_fornecedor) com métricas consolidadas.
+# dataset_catalog e dataset_schema deixam as queries com nome de tabela puro.
+
+resources:
+  dashboards:
+    dashboard_portfolio:
+      display_name: Projeto Farol · Portfólio
+      file_path: ../resources/dashboard-portfolio.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: gold

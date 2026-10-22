@@ -24,6 +24,7 @@ SELECT
   -- sujeira 3: código vazio vira NULL (a tarefa casa pelo arquivo / nome da lista)
   nullif(trim(codigo_ferramenta), '')                   AS codigo_ferramenta,
   CAST(valor_contrato  AS DECIMAL(18, 2))               AS valor_contrato,
+  CAST(orcamento_custo AS DECIMAL(18, 2))               AS orcamento,
   CAST(orcamento_custo AS DECIMAL(18, 2))               AS orcamento_custo,
   -- sujeira 1: data em yyyy-MM-dd e em dd/MM/yyyy
   coalesce(try_to_date(data_inicio, 'yyyy-MM-dd'),

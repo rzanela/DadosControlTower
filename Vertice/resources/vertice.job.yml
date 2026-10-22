@@ -1,3 +1,17 @@
+# O job do Projeto Farol: a Torre inteira, toda segunda às 6h.
+#
+# DAG com as 6 tarefas:
+#   ingestao_feriados ──┐
+#                       ├── conferencia_bronze ── medalhao (Lakeflow) ──┬── testes_de_qualidade
+#   ingestao_data_lake ─┘                                               └── status_com_ia
+#
+#   1. ingestao_feriados: Ingestão da BrasilAPI para bronze.feriados
+#   2. ingestao_data_lake: Ingestão do Supabase Storage via boto3 para recriar as 9 tabelas bronze
+#   3. conferencia_bronze: Conferência das 9 tabelas bronze contra as contagens esperadas (seed 42)
+#   4. medalhao: Pipeline Lakeflow unificando ferramentas na Silver e calculando a Gold
+#   5. testes_de_qualidade: 10 asserções de qualidade pós-medalhão com raise_error
+#   6. status_com_ia: Classificação e extração de bloqueios via IA generativa e regras
+
 resources:
   jobs:
     vertice_farol:
@@ -42,12 +56,30 @@ resources:
             file:
               path: ../src/conferencia/00-conferencia-bronze.sql
 
-        # o pipeline Lakeflow: silver (e, no prompt 2, a gold)
+        # o pipeline Lakeflow: silver e gold
         - task_key: medalhao
           depends_on:
             - task_key: conferencia_bronze
           pipeline_task:
             pipeline_id: ${resources.pipelines.vertice_medalhao.id}
+
+        # os testes de qualidade que barram regressões antes de chegar ao dashboard
+        - task_key: testes_de_qualidade
+          depends_on:
+            - task_key: medalhao
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/testes/testes.sql
+
+        # o texto livre do status vira coluna (IA + Regra + Regex)
+        - task_key: status_com_ia
+          depends_on:
+            - task_key: medalhao
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/ia/status_estruturado.sql
 
       email_notifications:
         no_alert_for_skipped_runs: false
@@ -61,7 +93,7 @@ resources:
         enabled: true
       schedule:
         pause_status: PAUSED
-        quartz_cron_expression: 52 0 6 * * ?
+        quartz_cron_expression: "0 0 6 ? * MON"
         timezone_id: America/Sao_Paulo
       timeout_seconds: 0
       webhook_notifications: {}

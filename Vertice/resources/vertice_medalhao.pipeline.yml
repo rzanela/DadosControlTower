@@ -9,4 +9,5 @@ resources:
       libraries:
         - glob:
             include: ../src/silver/**
-        # o prompt 2 acrescenta: - glob: { include: ../src/gold/** }
+        - glob:
+            include: ../src/gold/**
