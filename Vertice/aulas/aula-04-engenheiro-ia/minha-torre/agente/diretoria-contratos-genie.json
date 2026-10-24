@@ -1,0 +1,156 @@
+{
+  "version": 2,
+  "config": {
+    "sample_questions": [
+      {
+        "id": "76e3ae35c1d14b6da10cb10557a18c37",
+        "question": [
+          "Por que o PRJ-011 está atrasado?"
+        ]
+      },
+      {
+        "id": "8c41a772934547ab8fb599602809ba48",
+        "question": [
+          "Qual o SPI e CPI da carteira atual?"
+        ]
+      },
+      {
+        "id": "9e571f0e301b444e9763c38a6d18f40f",
+        "question": [
+          "Tenho pessoas paradas enquanto algum projeto pede mais gente?"
+        ]
+      },
+      {
+        "id": "a640d69087c34cb39bad992e61294c54",
+        "question": [
+          "Quanto cobrar da CodeForge por atrasos nas entregas?"
+        ]
+      },
+      {
+        "id": "a8e837741ba74600b9404757f6af3cc1",
+        "question": [
+          "Quais entregas de fornecedores estão em aberto e vencidas?"
+        ]
+      },
+      {
+        "id": "d0daeead58584083b3778728dbba916f",
+        "question": [
+          "Quais contratos vencem nos próximos 90 dias e precisam de aviso prévio?"
+        ]
+      }
+    ]
+  },
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "lakehouse_vertice.gold.contratos"
+      },
+      {
+        "identifier": "lakehouse_vertice.gold.projeto_situacao_atual"
+      },
+      {
+        "identifier": "lakehouse_vertice.gold.status_estruturado"
+      },
+      {
+        "identifier": "lakehouse_vertice.gold.utilizacao_pessoa_semana"
+      },
+      {
+        "identifier": "lakehouse_vertice.silver.entregas_fornecedor"
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "c1fdaa8d122e41769ff6c84c222a85cc",
+        "content": [
+          "A Vértice Tecnologia é a CONTRATANTE em todos os contratos. Multa é um valor que a Vértice COBRA do fornecedor por atraso ou descumprimento.",
+          "Hoje é 2026-10-16. Para calcular dias de atraso ou prazo de aviso prévio, use DATE'2026-10-16' — nunca current_date().",
+          "Ao mencionar uma cláusula, cite o número: 'conforme a Cláusula 5 – Penalidades'.",
+          "Fórmula de multa: valor_entrega × least(dias_atraso × multa_atraso_pct_dia, teto_multa_pct) / 100. dias_atraso = datediff(data_entrega, data_prometida) se entregue com atraso; datediff(DATE'2026-10-16', data_prometida) se em aberto vencida. Filtre sempre entregas na vigência atual: data_prometida > add_months(data_fim_vigencia, -12).",
+          "Aviso prévio: data_limite = date_sub(data_fim_vigencia, aviso_previo_dias). dias_ate_prazo = datediff(data_limite, DATE'2026-10-16'). Para contratos vencendo nos próximos N dias, filtre data_fim_vigencia <= date_add(DATE'2026-10-16', N).",
+          "Para calcular o SPI e CPI da carteira atual: use gold.projeto_situacao_atual com WHERE status = 'em_andamento', calculando SUM(ev) / SUM(pv) AS spi e SUM(ev) / SUM(ac) AS cpi.",
+          "Para entregas em aberto e vencidas: use silver.entregas_fornecedor com WHERE data_entrega IS NULL AND data_prometida < DATE'2026-10-16', calculando datediff(DATE'2026-10-16', data_prometida) AS dias_em_atraso e ordenando por dias_em_atraso DESC.",
+          "Para perguntas sobre atrasos de entrega ou multas, use silver.entregas_fornecedor joined com gold.contratos por lower(trim(fornecedor)).",
+          "Para perguntas sobre projetos, SPI, CPI, estouro, situação ou farol, use gold.projeto_situacao_atual.",
+          "Para causas de bloqueio, textos de status ou IA, use gold.status_estruturado.",
+          "Para utilização de pessoas, horas ociosas ou alocação, use gold.utilizacao_pessoa_semana.",
+          "Respostas sempre em português. Valores monetários em R$ com 2 casas decimais."
+        ]
+      }
+    ],
+    "example_question_sqls": [
+      {
+        "id": "079f11c4d9774534877ecda3e78499c9",
+        "question": [
+          "Qual o SPI e CPI da carteira atual?"
+        ],
+        "sql": [
+          "SELECT\n  SUM(ev) / SUM(pv) AS spi,\n  SUM(ev) / SUM(ac) AS cpi\nFROM lakehouse_vertice.gold.projeto_situacao_atual\nWHERE status = 'em_andamento'"
+        ]
+      },
+      {
+        "id": "0cc86e6ab1e2449aa59bcca100fbc54f",
+        "question": [
+          "Quais entregas de fornecedores estão em aberto e vencidas?"
+        ],
+        "sql": [
+          "SELECT\n  fornecedor,\n  projeto_id,\n  item,\n  data_prometida,\n  datediff(DATE'2026-10-16', data_prometida) AS dias_em_atraso,\n  valor\nFROM lakehouse_vertice.silver.entregas_fornecedor\nWHERE data_entrega IS NULL\n  AND data_prometida < DATE'2026-10-16'\nORDER BY dias_em_atraso DESC"
+        ]
+      },
+      {
+        "id": "20cba77403e24537932eddcabd3cd947",
+        "question": [
+          "Por que o PRJ-011 atrasou?"
+        ],
+        "sql": [
+          "SELECT\n  s.data_status,\n  s.causa_bloqueio,\n  s.dias_impacto,\n  s.texto_status\nFROM lakehouse_vertice.gold.status_estruturado s\nWHERE s.projeto_id = 'PRJ-011'\n  AND s.causa_bloqueio NOT IN ('sem_bloqueio', 'nao_reportado')\nORDER BY s.data_status DESC\nLIMIT 20"
+        ]
+      },
+      {
+        "id": "af2a784206a64aba8c2d7952945dab1d",
+        "question": [
+          "Quanto cobrar da CodeForge por atrasos nas entregas?"
+        ],
+        "sql": [
+          "SELECT\n  c.fornecedor,\n  e.item,\n  e.projeto_id,\n  e.data_prometida,\n  e.data_entrega,\n  coalesce(\n    datediff(e.data_entrega,   e.data_prometida),\n    datediff(DATE'2026-10-16', e.data_prometida)\n  ) AS dias_atraso,\n  e.valor,\n  round(\n    e.valor\n    * least(\n        coalesce(\n          datediff(e.data_entrega,   e.data_prometida),\n          datediff(DATE'2026-10-16', e.data_prometida)\n        ) * c.multa_atraso_pct_dia,\n        c.teto_multa_pct\n      )\n    / 100, 2\n  ) AS `multa_calculada_r$`\nFROM lakehouse_vertice.silver.entregas_fornecedor e\nJOIN lakehouse_vertice.gold.contratos c\n  ON lower(trim(e.fornecedor)) = lower(trim(c.fornecedor))\nWHERE lower(c.fornecedor) LIKE '%codeforge%'\n  AND (e.em_atraso = true\n       OR e.data_entrega > e.data_prometida\n       OR (e.data_entrega IS NULL AND e.data_prometida < DATE'2026-10-16'))\n  AND e.data_prometida > add_months(c.data_fim_vigencia, -12)\n  AND c.multa_atraso_pct_dia IS NOT NULL\nORDER BY `multa_calculada_r$` DESC"
+        ]
+      },
+      {
+        "id": "c09dcf105c2d40e8bd3227860a870449",
+        "question": [
+          "Quais contratos vencem nos próximos 90 dias e precisam de aviso prévio?"
+        ],
+        "sql": [
+          "SELECT\n  fornecedor,\n  data_fim_vigencia,\n  aviso_previo_dias,\n  date_sub(data_fim_vigencia, aviso_previo_dias) AS data_limite_aviso,\n  datediff(\n    date_sub(data_fim_vigencia, aviso_previo_dias),\n    DATE'2026-10-16'\n  ) AS dias_ate_prazo\nFROM lakehouse_vertice.gold.contratos\nWHERE data_fim_vigencia <= date_add(DATE'2026-10-16', 90)\nORDER BY data_limite_aviso"
+        ]
+      },
+      {
+        "id": "f8e9d8682fcf42b7aa509c0117c6483c",
+        "question": [
+          "Tenho SRE parado para o PRJ-011?"
+        ],
+        "sql": [
+          "SELECT\n  u.colaborador_id,\n  u.nome,\n  u.papel,\n  u.projeto_id,\n  round(SUM(u.horas_apontadas) / SUM(u.horas_disponiveis) * 100, 1) AS utilizacao_pct,\n  SUM(u.horas_ociosas)  AS horas_ociosas,\n  SUM(u.custo_ocioso)   AS custo_ocioso_r$\nFROM lakehouse_vertice.gold.utilizacao_pessoa_semana u\nWHERE u.projeto_id = 'PRJ-011'\n  AND u.papel ILIKE '%sre%'\n  AND u.semana > date_sub(DATE'2026-10-16', 84)  -- 12 semanas\nGROUP BY ALL\nORDER BY utilizacao_pct"
+        ]
+      }
+    ],
+    "join_specs": [
+      {
+        "id": "acced6c33e44429f8d51064764f8cbc5",
+        "left": {
+          "identifier": "lakehouse_vertice.silver.entregas_fornecedor",
+          "alias": "entregas_fornecedor"
+        },
+        "right": {
+          "identifier": "lakehouse_vertice.gold.contratos",
+          "alias": "contratos"
+        },
+        "sql": [
+          "lower(trim(entregas_fornecedor.fornecedor)) = lower(trim(contratos.fornecedor))",
+          "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"
+        ]
+      }
+    ]
+  }
+}

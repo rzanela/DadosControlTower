@@ -1,56 +1,46 @@
-Continue o bundle na raiz deste repositório. A silver está pronta.
-Agora a gold, no MESMO pipeline vertice_medalhao: acrescente o glob
-../src/gold/** em libraries. Os arquivos da gold escrevem com o nome completo
-lakehouse_vertice.gold.<tabela>; leem a silver pelo nome curto. COMMENT em todas.
-O "hoje" é DATE'2026-10-16'. Nunca current_date().
+Leia aulas/aula-04-engenheiro-ia/prd/CLAUDE.md. Use as skills databricks-apps e
+databricks-app-design.
 
-src/gold/01-fato-projeto-semana.sql → lakehouse_vertice.gold.fato_projeto_semana
-Uma linha por projeto e semana (sexta-feira), da semana do início até
-2026-10-16 (sequence(..., INTERVAL 1 WEEK) + explode). Colunas:
-- pv: orçamento × Σ horas × fração do baseline decorrida até a semana ÷ Σ horas
-  (greatest(0, least(1, datediff(semana, inicio)/datediff(fim, inicio))))
-- ev: orçamento × pct_concluido do status_semanal daquela sexta ÷ 100. Projeto
-  concluído não publica mais: use o último % (last_value(pct, true) OVER).
-- ac: custo real acumulado (silver.custos por semana, soma acumulada)
-- spi = ev/pv, cpi = ev/ac (try_divide, 4 casas), eac = orcamento / cpi
-- farol_do_gerente (o último farol publicado)
-- horas_disponiveis, horas_apontadas e horas_ociosas da semana (apontamentos)
-- EXPECT pv >= 0 e ev <= orcamento, FAIL UPDATE.
+1. Confira `databricks apps list --profile <perfil>` (limite de 3 apps no Free Edition).
+   Mova aulas/aula-04-engenheiro-ia/meu-agente/ para dentro do app (minha-torre/agente/)
+   e crie o app:
+   cd aulas/aula-04-engenheiro-ia && databricks apps init --name minha-torre \
+     --features analytics,genie \
+     --set analytics.sql-warehouse.id=<warehouse> \
+     --set genie.genie-space.id=<id do Genie "Farol · Diretoria + Contratos"> \
+     --set "genie.genie-space.name=Farol · Diretoria + Contratos" \
+     --run none --profile <perfil>
+   Inclua no databricks.yml um job farol_contratos (sql_task com agente/01-contratos.sql)
+   em resources/contratos.job.yml.
 
-src/gold/02-situacao-e-pessoas.sql
-- projeto_situacao_atual: a fotografia de 2026-10-16 de cada projeto (60
-  linhas). Traz o cadastro (projeto = projeto_id · nome, cliente, segmento,
-  tipo_projeto, ferramenta, gerente_projeto, valor_contrato, orcamento,
-  data_inicio, data_fim_baseline, duracao_baseline_dias, status) e os KPIs
-  calculados sobre silver.tarefas (o % de hoje das ferramentas): pv, ev, ac, spi, cpi, eac, estouro_previsto = greatest(eac - orcamento, 0),
-  margem_projetada, atraso_projetado_dias, termino_projetado, situacao
-  ('concluído' se status <> em_andamento; 'crítico' se SPI ou CPI < 0,8;
-  'atenção' se < 0,9; senão 'ok'), farol_do_gerente (status de hoje),
-  farol_calculado (regra do manual: verde >= 0,95; amarelo >= 0,90) e
-  melancia (em andamento, farol do gerente verde e SPI < 0,9).
-- utilizacao_pessoa_semana: pessoa × projeto × semana com nome, papel,
-  senioridade, horas disponíveis, apontadas, ociosas, utilizacao,
-  custo_ocioso (horas ociosas × custo_hora) e o spi_do_projeto naquela semana.
-Não crie dim_projeto nem tabela gold de fornecedor: o cadastro já está na
-projeto_situacao_atual, e fornecedor é lido direto da silver.entregas_fornecedor.
+2. config/queries (apague os exemplos do template):
+   - kpis.sql: projetos em andamento, em risco (atenção+crítico), críticos, melancias,
+     estouro previsto e carteira (projeto_situacao_atual), alto risco em 30 dias
+     (faixa_risco = 'alto' na data_referencia mais recente de score_estouro_30d) e multa a
+     cobrar de fornecedor, calculada na própria query com gold.contratos +
+     silver.entregas_fornecedor (a mesma conta do prompt 1, só a vigência atual).
+   - projetos_risco.sql: projetos em andamento do pior para o melhor, com SPI, CPI, estouro,
+     atraso projetado, farol do gerente × calculado, melancia, a causa mais frequente no
+     status_estruturado dos últimos 90 dias, os dias de impacto por falta_sre e por
+     rotatividade e multa a cobrar por projeto (mesma conta da multa).
+   - pessoas_ociosas.sql: pessoas com utilização < 20% nas últimas 12 semanas
+     (utilizacao_pessoa_semana), com horas paradas e custo ocioso MÉDIOS por semana e custo_hora.
+   A probabilidade por projeto (gold.score_estouro_30d, da noite 3) vem de uma rota
+   GET /api/score-estouro no servidor que responde {disponivel, linhas}.
 
-src/testes/testes.sql (sql_task) — cada teste com raise_error se falhar:
- 1 os 60 projetos têm cronograma na silver.tarefas
- 2 cada projeto veio de UMA ferramenta, a do cadastro do PMO
- 3 as horas do Excel na silver = a soma das linhas de TOTAL das planilhas
- 4 uma linha por pessoa na silver
- 5 a CodeForge virou um fornecedor só
- 6 a limpeza não mudou o custo total (bronze com replace = silver)
- 7 os 60 projetos têm fotografia de hoje
- 8 todo projeto em andamento tem SPI e CPI
- 9 o EV de hoje do status semanal bate com o das ferramentas (diferença < 1%)
-10 AC de hoje no fato = soma dos lançamentos até hoje
+3. Telas (português, R$, índices com 2 casas, Number() em tudo que vem do warehouse):
+   - Projetos em risco: 4 KPIs + tabela (situação com cor: crítico vermelho, atenção âmbar;
+     farol do gerente com 🍉 quando é melancia), coluna P(estouro) com "—" sem o modelo.
+   - Simulador: escolher uma pessoa ociosa e um projeto destino (só atenção/crítico; para SRE,
+     ordene pelos dias de falta_sre); mostrar horas no mês (× 4 semanas), ociosidade que deixa
+     de ser paga, dias de cronograma recuperados (dias de impacto da causa nos últimos 90 dias
+     ÷ 90 × 30), mobilização = horas de onboarding (editável, 40) × custo_hora, e saldo.
+     Explique a conta num <details>.
+   - Perguntar: <GenieChat alias="default" />.
+   Sem cache no createApp. Título "Projeto Farol".
 
-Acrescente ao job a tarefa testes_de_qualidade, depois de medalhao.
-
-Trabalhe direto: o EXPECT e os testes são a conferência. Nunca dispare um
-run com outro ainda ativo (limite de compute do Free Edition).
-
-Rode e me mostre a saída (só o medalhão e os testes; a bronze não muda):
-  databricks bundle deploy --profile DEFAULT
-  databricks bundle run vertice_farol --only medalhao,testes_de_qualidade --profile DEFAULT
+4. npm run typecheck, npm run lint, npm test, databricks apps validate.
+   Depois: databricks bundle deploy --profile <perfil> (cria o app e o service principal).
+   Crie scripts/conceder-acesso.sh (lê o service_principal_client_id com apps get e dá
+   USE CATALOG em lakehouse_vertice e USE SCHEMA + SELECT na gold e na silver), rode e faça
+   databricks apps deploy --profile <perfil>. Me mostre a URL.

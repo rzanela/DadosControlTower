@@ -7,4 +7,6 @@ __pycache__/
 scratch/**
 !scratch/README.md
 **/explorations/**
-**/!explorations/README.md
+node_modules/
+client/dist/
+*.pyc

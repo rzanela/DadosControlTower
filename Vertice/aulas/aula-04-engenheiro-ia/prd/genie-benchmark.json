@@ -1,0 +1,32 @@
+[
+  {
+    "pergunta": "Quanto cobrar da CodeForge por atrasos nas entregas?",
+    "sql_esperado": "SELECT c.fornecedor, e.item, e.projeto_id, e.data_prometida, e.data_entrega, coalesce(datediff(e.data_entrega, e.data_prometida), datediff(DATE'2026-10-16', e.data_prometida)) AS dias_atraso, e.valor, round(e.valor * least(coalesce(datediff(e.data_entrega, e.data_prometida), datediff(DATE'2026-10-16', e.data_prometida)) * c.multa_atraso_pct_dia, c.teto_multa_pct) / 100, 2) AS `multa_calculada_r$` FROM lakehouse_vertice.silver.entregas_fornecedor e JOIN lakehouse_vertice.gold.contratos c ON lower(trim(e.fornecedor)) = lower(trim(c.fornecedor)) WHERE lower(c.fornecedor) LIKE '%codeforge%' AND (e.em_atraso = true OR e.data_entrega > e.data_prometida OR (e.data_entrega IS NULL AND e.data_prometida < DATE'2026-10-16')) AND e.data_prometida > add_months(c.data_fim_vigencia, -12) AND c.multa_atraso_pct_dia IS NOT NULL ORDER BY `multa_calculada_r$` DESC",
+    "resultado_esperado": ""
+  },
+  {
+    "pergunta": "Quais contratos vencem nos próximos 90 dias e precisam de aviso prévio?",
+    "sql_esperado": "SELECT fornecedor, data_fim_vigencia, aviso_previo_dias, date_sub(data_fim_vigencia, aviso_previo_dias) AS data_limite_aviso, datediff(date_sub(data_fim_vigencia, aviso_previo_dias), DATE'2026-10-16') AS dias_ate_prazo FROM lakehouse_vertice.gold.contratos WHERE data_fim_vigencia <= date_add(DATE'2026-10-16', 90) ORDER BY data_limite_aviso",
+    "resultado_esperado": ""
+  },
+  {
+    "pergunta": "Qual o SPI e CPI da carteira atual?",
+    "sql_esperado": "SELECT SUM(ev) / SUM(pv) AS spi, SUM(ev) / SUM(ac) AS cpi FROM lakehouse_vertice.gold.projeto_situacao_atual WHERE status = 'em_andamento'",
+    "resultado_esperado": "0.92"
+  },
+  {
+    "pergunta": "Por que o PRJ-011 atrasou?",
+    "sql_esperado": "SELECT data_status, causa_bloqueio, dias_impacto, texto_status FROM lakehouse_vertice.gold.status_estruturado WHERE projeto_id = 'PRJ-011' AND causa_bloqueio NOT IN ('sem_bloqueio', 'nao_reportado') ORDER BY data_status DESC LIMIT 20",
+    "resultado_esperado": ""
+  },
+  {
+    "pergunta": "Tenho SRE parado para o PRJ-011?",
+    "sql_esperado": "SELECT colaborador_id, nome, papel, projeto_id, round(SUM(horas_apontadas) / SUM(horas_disponiveis) * 100, 1) AS utilizacao_pct, SUM(horas_ociosas) AS horas_ociosas FROM lakehouse_vertice.gold.utilizacao_pessoa_semana WHERE projeto_id = 'PRJ-011' AND papel ILIKE '%sre%' AND semana > date_sub(DATE'2026-10-16', 84) GROUP BY ALL ORDER BY utilizacao_pct",
+    "resultado_esperado": ""
+  },
+  {
+    "pergunta": "Quais entregas de fornecedores estão em aberto e vencidas?",
+    "sql_esperado": "SELECT fornecedor, projeto_id, item, data_prometida, datediff(DATE'2026-10-16', data_prometida) AS dias_em_atraso, valor FROM lakehouse_vertice.silver.entregas_fornecedor WHERE data_entrega IS NULL AND data_prometida < DATE'2026-10-16' ORDER BY dias_em_atraso DESC",
+    "resultado_esperado": ""
+  }
+]

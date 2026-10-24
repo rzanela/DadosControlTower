@@ -43,10 +43,13 @@ def dividir(sql: str) -> list[str]:
 
 def cli(args: list[str], profile: str) -> dict:
     r = subprocess.run(["databricks", *args, "--profile", profile, "-o", "json"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or r.stdout.strip())
-    return json.loads(r.stdout or "{}")
+    try:
+        return json.loads(r.stdout or "{}")
+    except Exception:
+        return {}
 
 
 def warehouse_padrao(profile: str) -> str:
@@ -61,7 +64,9 @@ def executar(stmt: str, warehouse: str, profile: str) -> dict:
     corpo = json.dumps({"warehouse_id": warehouse, "statement": stmt,
                         "wait_timeout": "50s", "on_wait_timeout": "CONTINUE"})
     r = cli(["api", "post", "/api/2.0/sql/statements", "--json", corpo], profile)
-    while r["status"]["state"] in ("PENDING", "RUNNING"):
+    if not r or "status" not in r:
+        return {"status": {"state": "FAILED", "error": {"message": f"Resposta inválida da API: {r}"}}}
+    while r.get("status", {}).get("state") in ("PENDING", "RUNNING"):
         time.sleep(3)
         r = cli(["api", "get", f"/api/2.0/sql/statements/{r['statement_id']}"], profile)
     return r
@@ -91,20 +96,20 @@ def main() -> int:
 
     wh = args.warehouse or warehouse_padrao(args.profile)
     stmts = dividir(open(args.arquivo, encoding="utf-8").read())
-    print(f"{args.arquivo}: {len(stmts)} statement(s) · warehouse {wh}\n")
+    print(f"{args.arquivo}: {len(stmts)} statement(s) · warehouse {wh}\n", flush=True)
 
     falhas = 0
     for n, stmt in enumerate(stmts, 1):
         titulo = next((l.strip() for l in stmt.splitlines()
                        if l.strip() and not l.strip().startswith("--")), "")[:70]
-        print(f"[{n}/{len(stmts)}] {titulo}")
+        print(f"[{n}/{len(stmts)}] {titulo}", flush=True)
         try:
             r = executar(stmt, wh, args.profile)
         except RuntimeError as e:
             r = {"status": {"state": "FAILED", "error": {"message": str(e)}}}
         if r["status"]["state"] != "SUCCEEDED":
             falhas += 1
-            print(f"  FALHOU: {r['status'].get('error', {}).get('message', r['status'])}\n")
+            print(f"  FALHOU: {r['status'].get('error', {}).get('message', r['status'])}\n", flush=True)
             if not args.continuar:
                 return 1
             continue

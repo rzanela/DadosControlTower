@@ -1,0 +1,13 @@
+# Job do Farol de Contratos
+# Executa a extração dos contratos de fornecedores e cálculo de cláusulas e multas.
+
+resources:
+  jobs:
+    farol_contratos:
+      name: farol_contratos
+      tasks:
+        - task_key: extrair_contratos
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../aulas/aula-04-engenheiro-ia/minha-torre/agente/01-contratos.sql
